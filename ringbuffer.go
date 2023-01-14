@@ -30,30 +30,27 @@ type RingBuffer interface {
 }
 
 func New(n int) RingBuffer {
-	cap := roundUp(int32(n))
 	return &ringBuffer{
 		head: &sequence{},
 		tail: &sequence{},
-		mask: cap - 1,
-		cap:  cap,
+		size: int32(n),
 	}
 }
 
 type ringBuffer struct {
 	head *sequence
 	tail *sequence
-	mask int32
-	cap  int32
+	size int32
 }
 
 func (rb *ringBuffer) Put(f func(i int)) error {
 	for {
 		headReq := rb.head.Request()
 		tailReq := rb.tail.Request()
-		if headReq-tailReq == -1 || headReq-tailReq == rb.cap-1 {
+		if headReq-tailReq == -1 || headReq-tailReq == rb.size-1 {
 			return ErrFull
 		}
-		next := (headReq + 1) & rb.mask
+		next := (headReq + 1) % rb.size
 		if ok := rb.head.Commit(headReq, next); !ok {
 			continue
 		}
@@ -70,7 +67,7 @@ func (rb *ringBuffer) Get(f func(i int)) error {
 		if headReq == tailReq {
 			return ErrNil
 		}
-		next := (tailReq + 1) & rb.mask
+		next := (tailReq + 1) % rb.size
 		if ok := rb.tail.Commit(tailReq, next); !ok {
 			continue
 		}
@@ -78,15 +75,4 @@ func (rb *ringBuffer) Get(f func(i int)) error {
 		break
 	}
 	return nil
-}
-
-func roundUp(v int32) int32 {
-	v--
-	v |= v >> 1
-	v |= v >> 2
-	v |= v >> 4
-	v |= v >> 8
-	v |= v >> 16
-	v++
-	return v
 }
