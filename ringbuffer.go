@@ -5,9 +5,10 @@ import (
 	"sync/atomic"
 )
 
-var ErrFull = errors.New("ringbuffer: data full")
-
-var ErrNil = errors.New("ringbuffer: no data")
+var (
+	ErrFull = errors.New("ringbuffer: data full")
+	ErrNil  = errors.New("ringbuffer: no data")
+)
 
 type sequence struct {
 	cur int32
@@ -24,18 +25,17 @@ func (s *sequence) Commit(req int32, new int32) (ok bool) {
 }
 
 type RingBuffer interface {
-	Put(x interface{}) error
-	Get() (interface{}, error)
+	Put(f func(i int)) error
+	Get(f func(i int)) error
 }
 
-func New(size int) RingBuffer {
-	cap := roundUp(int32(size + 1))
+func New(n int) RingBuffer {
+	cap := roundUp(int32(n))
 	return &ringBuffer{
 		head: &sequence{},
 		tail: &sequence{},
 		mask: cap - 1,
 		cap:  cap,
-		data: make([]interface{}, cap),
 	}
 }
 
@@ -44,46 +44,40 @@ type ringBuffer struct {
 	tail *sequence
 	mask int32
 	cap  int32
-	data []interface{}
 }
 
-func (rb *ringBuffer) Put(x interface{}) error {
+func (rb *ringBuffer) Put(f func(i int)) error {
 	for {
-
 		headReq := rb.head.Request()
 		tailReq := rb.tail.Request()
-
 		if headReq-tailReq == -1 || headReq-tailReq == rb.cap-1 {
 			return ErrFull
 		}
-
 		next := (headReq + 1) & rb.mask
-
 		if ok := rb.head.Commit(headReq, next); !ok {
 			continue
 		}
-		rb.data[next] = x
+		f(int(next))
 		break
 	}
 	return nil
 }
 
-func (rb *ringBuffer) Get() (interface{}, error) {
+func (rb *ringBuffer) Get(f func(i int)) error {
 	for {
 		headReq := rb.head.Request()
 		tailReq := rb.tail.Request()
-
 		if headReq == tailReq {
-			return nil, ErrNil
+			return ErrNil
 		}
-
 		next := (tailReq + 1) & rb.mask
 		if ok := rb.tail.Commit(tailReq, next); !ok {
 			continue
 		}
-		return rb.data[next], nil
+		f(int(next))
+		break
 	}
-	return nil, ErrNil
+	return nil
 }
 
 func roundUp(v int32) int32 {

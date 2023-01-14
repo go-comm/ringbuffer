@@ -1,18 +1,32 @@
 package ringbuffer
 
-import "testing"
+import (
+	"testing"
+)
+
+func Assert(t *testing.T, condition bool, reason interface{}) {
+	if !condition {
+		t.Fatal(reason)
+	}
+}
 
 func Test_RingBuffer(t *testing.T) {
-	rb := New(3)
+	data := make([]int, 2)
+	rb := New(len(data))
+	var err error
 
-	t.Log(rb.Get())
+	err = rb.Put(func(i int) { data[i] = 1 })
+	Assert(t, err == nil, err)
 
-	t.Log(rb.Put("1"))
-	t.Log(rb.Put("2"))
-	t.Log(rb.Put("3"))
-	t.Log(rb.Put("4"))
+	err = rb.Put(func(i int) { data[i] = 3 })
+	Assert(t, err == ErrFull, err)
 
-	t.Log(rb.Get())
-	t.Log(rb.Get())
-	t.Log(rb.Get())
+	var got int
+	err = rb.Get(func(i int) { got = data[i] })
+	Assert(t, err == nil, err)
+	Assert(t, got == 1, 1)
+
+	err = rb.Get(func(i int) { got = data[i] })
+	Assert(t, err == ErrNil, err)
+
 }
